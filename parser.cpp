@@ -1,4 +1,5 @@
 #include <cstdlib>
+#include <iostream>
 #include "parser.h"
 
 namespace calc {
@@ -81,15 +82,19 @@ namespace calc {
 
 		if (c == '(') {
 			Expr* expression = parseExpression(str);
-			if (readNext(str) != ')') exit(1);
+			if (readNext(str) != ')') {
+				std::cerr << "Missing ')'." << std::endl;
+				exit(1);
+			}
 			return expression;
-		} else if (c == '_') {
+		} else if (c == '_' || c == '#' || c == '$') {
 			uint32_t val = parseValue(str);
 			return new Expr(VAR, val);
 		} else if (c >= '0' && c <= '9') {
 			uint32_t val = parseValue(--str);
 			return new Expr(VAL, val);
 		} else {
+			std::cerr << "Unexpected token '" << c << "'." << std::endl;
 			exit(1);
 		}
 	}
