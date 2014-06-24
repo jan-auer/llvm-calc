@@ -95,19 +95,18 @@ static ExecutionEngine* createEngine(Module* module, EngineKind::Kind kind = Eng
     exit(1);
   }
 
-  errs() << "verifying... ";
   if (verifyModule(*module)) {
-    errs() << "Error constructing function!\n";
+    errs() << "ERROR constructing function!\n";
     exit(1);
   }
-  errs() << "OK\n";
 
-  errs() << "We just constructed this LLVM module:\n\n---------\n" << *module;
-  errs() << "---------\nstarting calc with " 
-         << (kind==EngineKind::Interpreter ? "interpreter" 
-          : (kind==EngineKind::JIT) ? "JIT" 
+  errs() << "LLVM code compilation completed successfully.\n\n---------\n"
+         << *module << "---------\n\n"
+         << "Starting calc with "
+         << (kind==EngineKind::Interpreter ? "interpreter"
+          : (kind==EngineKind::JIT) ? "JIT"
           : "???" )
-         << " ...\n\n";
+         << " ...\n";
 
   return engine;
 }
@@ -137,7 +136,7 @@ int main(int argc, char **argv) {
   // Compute the result and print it out
   auto calcArgs = parseArguments(argc - 2, argv + 2);
   GenericValue calcValue = engine->runFunction(calcFunction, calcArgs);
-  outs() << "Result: " << calcValue.IntVal << "\n";
+  outs() << "RESULT: " << calcValue.IntVal << "\n";
 
   return 0;
 }
