@@ -34,7 +34,7 @@ namespace calc {
 	 * @param str A pointer to the character array.
 	 * @return The parsed factor.
 	 */
-	static uint32_t parseValue(char* &str);
+	static uint64_t parseValue(char* &str);
 
 	Expr* parseExpression(char* &str) {
 		Expr* expression = parseTerm(str);
@@ -88,10 +88,13 @@ namespace calc {
 			}
 			return expression;
 		} else if (c == '_' || c == '#' || c == '$') {
-			uint32_t val = parseValue(str);
+			int64_t val = parseValue(str);
 			return new Expr(VAR, val);
+		} else if (c == '-') {
+			int64_t val = parseValue(str);
+			return new Expr(VAL, -val);
 		} else if (c >= '0' && c <= '9') {
-			uint32_t val = parseValue(--str);
+			int64_t val = parseValue(--str);
 			return new Expr(VAL, val);
 		} else {
 			std::cerr << "Unexpected token '" << c << "'." << std::endl;
@@ -99,8 +102,8 @@ namespace calc {
 		}
 	}
 
-	static uint32_t parseValue(char* &str) {
-		uint32_t val = 0;
+	static uint64_t parseValue(char* &str) {
+		uint64_t val = 0;
 
 		char c = readNext(str);
 		while (c >= '0' && c <= '9') {
