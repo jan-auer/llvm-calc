@@ -1,4 +1,8 @@
 #include <cstdint>
+#include <cstdlib>
+#include <iostream>
+#include <algorithm>
+#include <vector>
 
 #include "llvm/IR/LLVMContext.h"
 #include "llvm/IR/Module.h"
@@ -18,21 +22,32 @@
 using namespace llvm;
 using namespace calc;
 
-/** Recursively creates code for an operation. */
-static Value* createOperation(LLVMContext& context, Value* params, Expr* expression, BasicBlock* block) {
-  if (expression->type == VAL) {
-    return ConstantInt::get(Type::getInt64Ty(context), expression->val);
-  } else if (expression->type == VAR) {
-    Value* i = ConstantInt::get(Type::getInt32Ty(context), expression->val);
-    Value* pointer = GetElementPtrInst::Create(params, i, "aptr", block);
-    return new LoadInst(pointer, "a", block);
-  }
+static Function* createFunction(Module* module, const std::string& name, Type* returnType, int argCount = 0, Type* argType = nullptr) {
+  std::vector<Type*> params(argCount, argType);
+  FunctionType* funcType = FunctionType::get(returnType, params, false);
+  return cast<Function>(module->getOrInsertFunction(name, funcType));
+}
 
-  Value* lhs = createOperation(context, params, expression->left, block);
-  Value* rhs = createOperation(context, params, expression->right, block);
+static std::vector<Value*> extractParameters(Function* function) {
+  std::vector<Value*> params;
+  for (auto args = function->arg_begin(); args != function->arg_end();)
+    params.push_back(args++);
+
+  return params;
+}
+
+static Value* compileExpression(LLVMContext& context, const Expr* expression, const std::vector<Value*>& params, BasicBlock* block) {
+  if (expression->type == VAL)
+    return ConstantInt::get(Type::getInt64Ty(context), expression->val);
+
+  if (expression->type == VAR)
+    return params[expression->val];
+
+  Value* lhs = compileExpression(context, expression->left, params, block);
+  Value* rhs = compileExpression(context, expression->right, params, block);
 
   switch (expression->type) {
-  	case ADD:
+    case ADD:
       return BinaryOperator::CreateAdd(lhs, rhs, "ADD", block);
     case SUB:
       return BinaryOperator::CreateSub(lhs, rhs, "Sub", block);
@@ -40,70 +55,87 @@ static Value* createOperation(LLVMContext& context, Value* params, Expr* express
       return BinaryOperator::CreateMul(lhs, rhs, "Mul", block);
     case DIV:
       return BinaryOperator::CreateSDiv(lhs, rhs, "Div", block);
-    case VAL:
     default:
-    	return nullptr;
+      // cannot happen
+      return nullptr;
   }
 }
 
-/** Creates code for the calc function. */
-static Function* createCalcFunction(Module* module, LLVMContext& context, Expr* expression, Type* returnType, Type* argType) {
-  Function* func = cast<Function>(module->getOrInsertFunction("calc", returnType, argType, nullptr));
+static int countVars(const Expr* expression) {
+  if (expression->type == VAR)
+    return expression->val + 1;
+
+  if (expression->type == VAL)
+    return 0;
+
+  return std::max(countVars(expression->left), countVars(expression->right));
+}
+
+static Function* compileFunction(LLVMContext& context, Module* module, const std::string& name, const Expr* expression) {
+  Type* argType = Type::getInt64Ty(context);
+  Type* returnType = Type::getInt64Ty(context);
+
+  Function* func = createFunction(module, name, returnType, countVars(expression), argType);
   BasicBlock* block = BasicBlock::Create(context, "EntryBlock", func);
-  
-  Value* params = func->arg_begin()++;
-  Value* result = createOperation(context, params, expression, block);
+  Value* result = compileExpression(context, expression, extractParameters(func), block);
   ReturnInst::Create(context, result, block);
+
   return func;
 }
 
-int main(int argc, char **argv) {
-  InitializeNativeTarget();
-  LLVMContext context;
-
-  // Create the expression to compile
-  Expr* expression = parseExpression(argv[1]);
-
-  // Create a module containing the `calc` function
-  OwningPtr<Module> module(new Module("test", context));
-  Type* returnType = Type::getInt64Ty(context);
-  Type* argType = PointerType::get(returnType, 0);
-  Function* calcFunction = createCalcFunction(module.get(), context, expression, returnType, argType);
-
-  // Initialize the LLVM JIT engine.
-  auto kind = EngineKind::JIT;
+static ExecutionEngine* createEngine(Module* module, EngineKind::Kind kind = EngineKind::JIT) {
   std::string errStr;
-  ExecutionEngine *engine = EngineBuilder(module.get())
+  ExecutionEngine* engine = EngineBuilder(module)
       .setErrorStr(&errStr)
       .setEngineKind(kind)
       .create();
 
   if (!engine) {
-    errs() << argv[0] << ": Failed to construct ExecutionEngine: " << errStr << "\n";
-    return 1;
+    errs() << "Failed to construct ExecutionEngine: " << errStr << "\n";
+    exit(1);
   }
 
   errs() << "verifying... ";
   if (verifyModule(*module)) {
-    errs() << argv[0] << ": Error constructing function!\n";
-    return 1;
+    errs() << "Error constructing function!\n";
+    exit(1);
   }
   errs() << "OK\n";
-  errs() << "We just constructed this LLVM module:\n\n---------\n" << *module;
-  errs() << "---------\nstarting calc(" << 1 << ") with " 
-         << (kind==EngineKind::Interpreter ? "interpreter" 
-         	: (kind==EngineKind::JIT) ? "JIT" 
-         	: "???" )
-         << " ...\n";
 
-  // Take the call parameters and pass them into a pointer of `calc`
-  std::vector<uint64_t> args;
-  for (int i = 2; i < argc; ++i)
-  	args.push_back(atol(argv[i]));
-  std::vector<GenericValue> calcArgs(1);
-  calcArgs[0].PointerVal = args.data();
+  errs() << "We just constructed this LLVM module:\n\n---------\n" << *module;
+  errs() << "---------\nstarting calc with " 
+         << (kind==EngineKind::Interpreter ? "interpreter" 
+          : (kind==EngineKind::JIT) ? "JIT" 
+          : "???" )
+         << " ...\n\n";
+
+  return engine;
+}
+
+static std::vector<GenericValue> parseArguments(int argc, char** argv) {
+  std::vector<GenericValue> args(argc);
+  for (int i = 0; i < argc; ++i)
+    args[i].IntVal = APInt(64, atol(argv[i]));
+
+  return args;
+}
+
+int main(int argc, char **argv) {
+  InitializeNativeTarget();
+
+  // Create a module containing the `calc` function
+  LLVMContext context;
+  OwningPtr<Module> module(new Module("test", context));
+
+  // Create the expression and compile it
+  Expr* expression = parseExpression(argv[1]);
+  Function* calcFunction = compileFunction(context, module.get(), "calc", expression);
+
+  // Initialize the LLVM JIT engine.
+  ExecutionEngine* engine = createEngine(module.get());
 
   // Compute the result and print it out
+  auto calcArgs = parseArguments(argc - 2, argv + 2);
   GenericValue calcValue = engine->runFunction(calcFunction, calcArgs);
   outs() << "Result: " << calcValue.IntVal << "\n";
 
