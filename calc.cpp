@@ -86,9 +86,9 @@ static Function* compileFunction(LLVMContext& context, Module* module, const std
 static ExecutionEngine* createEngine(Module* module, EngineKind::Kind kind = EngineKind::JIT) {
   std::string errStr;
   ExecutionEngine* engine = EngineBuilder(module)
-      .setErrorStr(&errStr)
-      .setEngineKind(kind)
-      .create();
+  .setErrorStr(&errStr)
+  .setEngineKind(kind)
+  .create();
 
   if (!engine) {
     errs() << "Failed to construct ExecutionEngine: " << errStr << "\n";
@@ -101,12 +101,12 @@ static ExecutionEngine* createEngine(Module* module, EngineKind::Kind kind = Eng
   }
 
   errs() << "LLVM code compilation completed successfully.\n\n---------\n"
-         << *module << "---------\n\n"
-         << "Starting calc with "
-         << (kind==EngineKind::Interpreter ? "interpreter"
-          : (kind==EngineKind::JIT) ? "JIT"
-          : "???" )
-         << " ...\n";
+  << *module << "---------\n\n"
+  << "Starting calc with "
+  << (kind==EngineKind::Interpreter ? "interpreter"
+    : (kind==EngineKind::JIT) ? "JIT"
+    : "???" )
+  << " ...\n";
 
   return engine;
 }
