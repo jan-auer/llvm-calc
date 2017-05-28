@@ -3,15 +3,15 @@
 #include <iostream>
 #include <algorithm>
 #include <vector>
+#include <memory>
 
 #include "llvm/IR/LLVMContext.h"
 #include "llvm/IR/Module.h"
 #include "llvm/IR/DerivedTypes.h"
 #include "llvm/IR/Constants.h"
 #include "llvm/IR/Instructions.h"
-#include "llvm/Analysis/Verifier.h"
-#include "llvm/ExecutionEngine/JIT.h"
-#include "llvm/ExecutionEngine/Interpreter.h"
+#include "llvm/IR/Verifier.h"
+#include "llvm/ExecutionEngine/MCJIT.h"
 #include "llvm/ExecutionEngine/GenericValue.h"
 #include "llvm/Support/raw_ostream.h"
 #include "llvm/Support/TargetSelect.h"
@@ -30,9 +30,8 @@ static Function* createFunction(Module* module, const std::string& name, Type* r
 
 static std::vector<Value*> extractParameters(Function* function) {
   std::vector<Value*> params;
-  for (auto args = function->arg_begin(); args != function->arg_end();)
-    params.push_back(args++);
-
+  for (auto& argument : function->getArgumentList())
+    params.push_back(&argument);
   return params;
 }
 
@@ -85,7 +84,7 @@ static Function* compileFunction(LLVMContext& context, Module* module, const std
 
 static ExecutionEngine* createEngine(Module* module, EngineKind::Kind kind = EngineKind::JIT) {
   std::string errStr;
-  ExecutionEngine* engine = EngineBuilder(module)
+  ExecutionEngine* engine = EngineBuilder(std::unique_ptr<Module>(module))
   .setErrorStr(&errStr)
   .setEngineKind(kind)
   .create();
@@ -121,17 +120,19 @@ static std::vector<GenericValue> parseArguments(int argc, char** argv) {
 
 int main(int argc, char **argv) {
   InitializeNativeTarget();
+  InitializeNativeTargetAsmPrinter();
+  InitializeNativeTargetAsmParser();
 
   // Create a module containing the `calc` function
   LLVMContext context;
-  OwningPtr<Module> module(new Module("test", context));
+  Module* module = new Module("test", context);
 
   // Create the expression and compile it
   Expr* expression = parseExpression(argv[1]);
-  Function* calcFunction = compileFunction(context, module.get(), "calc", expression);
+  Function* calcFunction = compileFunction(context, module, "calc", expression);
 
   // Initialize the LLVM JIT engine.
-  ExecutionEngine* engine = createEngine(module.get());
+  ExecutionEngine* engine = createEngine(module);
 
   // Compute the result and print it out
   auto calcArgs = parseArguments(argc - 2, argv + 2);

@@ -1,7 +1,8 @@
+LLVM_CONFIG=/usr/local/opt/llvm/bin/llvm-config
 CXX=clang++
-CXXFLAGS=-std=c++11 `llvm-config --cxxflags`
+CXXFLAGS=-std=c++11 `${LLVM_CONFIG} --cxxflags`
 LINK.o=$(LINK.cc)
-LDFLAGS=`llvm-config --ldflags --libs jit interpreter nativecodegen`
+LDFLAGS=`${LLVM_CONFIG} --system-libs --ldflags --libs engine`
 
 calc: calc.o parser.o
 
