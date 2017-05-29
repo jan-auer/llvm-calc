@@ -20,3 +20,10 @@
 *.out
 *.app
 calc
+
+# Buck
+buck-out/
+.buckconfig.local
+.buckd/
+.buckversion
+.fakebuckversion

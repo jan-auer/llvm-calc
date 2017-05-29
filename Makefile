@@ -1,3 +1,6 @@
+# THIS IS AN OUTDATED MAKEFILE
+# PLEASE INSTALL BUCK (https://buckbuild.com) AND BUILD //:calc
+
 LLVM_CONFIG=/usr/local/opt/llvm/bin/llvm-config
 CXX=clang++
 CXXFLAGS=-std=c++11 `${LLVM_CONFIG} --cxxflags`

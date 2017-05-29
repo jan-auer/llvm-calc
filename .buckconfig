@@ -1,0 +1,6 @@
+[cxx]
+  cxx = /usr/bin/clang++
+  cxxflags = -std=c++11 -g
+
+[llvm]
+  bin = /usr/local/opt/llvm/bin
